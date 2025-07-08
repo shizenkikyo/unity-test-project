@@ -3,31 +3,31 @@ using UnityEngine;
 public class CameraFollow : MonoBehaviour
 {
     [Header("追跡設定")]
-    [SerializeField] private Transform target; // 追跡対象（Cube）
-    [SerializeField] private Vector3 offset = new Vector3(0, 5, -7); // カメラの相対位置
-    [SerializeField] private float smoothSpeed = 5f; // 追跡の滑らかさ
+    [SerializeField] private Transform _target; // 追跡対象（Cube）
+    [SerializeField] private Vector3 _offset = new Vector3(0, 5, -7); // カメラの相対位置
+    [SerializeField] private float _smoothSpeed = 5f; // 追跡の滑らかさ
     
     [Header("高度設定")]
-    [SerializeField] private bool enableHeightAdjustment = true; // 高度調整を有効にするか
-    [SerializeField] private float minHeight = 3f; // 最小高度
-    [SerializeField] private float maxHeight = 8f; // 最大高度
+    [SerializeField] private bool _enableHeightAdjustment = true; // 高度調整を有効にするか
+    [SerializeField] private float _minHeight = 3f; // 最小高度
+    [SerializeField] private float _maxHeight = 8f; // 最大高度
     
     [Header("回転設定")]
-    [SerializeField] private bool enableRotation = false; // カメラ回転を有効にするか
-    [SerializeField] private float rotationSpeed = 2f; // 回転速度
+    [SerializeField] private bool _enableRotation = false; // カメラ回転を有効にするか
+    [SerializeField] private float _rotationSpeed = 2f; // 回転速度
     
-    private Vector3 desiredPosition;
-    private Vector3 smoothedPosition;
+    private Vector3 _desiredPosition;
+    private Vector3 _smoothedPosition;
     
     void Start()
     {
         // ターゲットが設定されていない場合、シーン内のCubeを自動で探す
-        if (target == null)
+        if (_target == null)
         {
             GameObject cube = GameObject.Find("Cube");
             if (cube != null)
             {
-                target = cube.transform;
+                _target = cube.transform;
                 Debug.Log("Cubeを自動で見つけて追跡対象に設定しました");
             }
             else
@@ -37,44 +37,44 @@ public class CameraFollow : MonoBehaviour
         }
         
         // 初期位置を設定
-        if (target != null)
+        if (_target != null)
         {
-            transform.position = target.position + offset;
+            transform.position = _target.position + _offset;
         }
     }
     
     void LateUpdate()
     {
-        if (target == null) return;
+        if (_target == null) return;
         
         // 目標位置を計算
-        desiredPosition = target.position + offset;
+        _desiredPosition = _target.position + _offset;
         
         // 高度調整
-        if (enableHeightAdjustment)
+        if (_enableHeightAdjustment)
         {
-            float currentHeight = desiredPosition.y;
-            float adjustedHeight = Mathf.Clamp(currentHeight, minHeight, maxHeight);
-            desiredPosition.y = adjustedHeight;
+            float currentHeight = _desiredPosition.y;
+            float adjustedHeight = Mathf.Clamp(currentHeight, _minHeight, _maxHeight);
+            _desiredPosition.y = adjustedHeight;
         }
         
         // 滑らかな移動
-        smoothedPosition = Vector3.Lerp(transform.position, desiredPosition, smoothSpeed * Time.deltaTime);
-        transform.position = smoothedPosition;
+        _smoothedPosition = Vector3.Lerp(transform.position, _desiredPosition, _smoothSpeed * Time.deltaTime);
+        transform.position = _smoothedPosition;
         
         // カメラをターゲットに向ける
-        if (target != null)
+        if (_target != null)
         {
-            Vector3 lookDirection = target.position - transform.position;
+            Vector3 lookDirection = _target.position - transform.position;
             if (lookDirection != Vector3.zero)
             {
                 Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, smoothSpeed * Time.deltaTime);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, _smoothSpeed * Time.deltaTime);
             }
         }
         
         // 回転機能（オプション）
-        if (enableRotation)
+        if (_enableRotation)
         {
             HandleRotation();
         }
@@ -85,22 +85,22 @@ public class CameraFollow : MonoBehaviour
         // マウスの右クリックでカメラを回転
         if (Input.GetMouseButton(1))
         {
-            float mouseX = Input.GetAxis("Mouse X") * rotationSpeed;
-            float mouseY = Input.GetAxis("Mouse Y") * rotationSpeed;
+            float mouseX = Input.GetAxis("Mouse X") * _rotationSpeed;
+            float mouseY = Input.GetAxis("Mouse Y") * _rotationSpeed;
             
             // Y軸回転（水平回転）
-            transform.RotateAround(target.position, Vector3.up, mouseX);
+            transform.RotateAround(_target.position, Vector3.up, mouseX);
             
             // X軸回転（垂直回転）は制限を設ける
             Vector3 right = transform.right;
-            transform.RotateAround(target.position, right, -mouseY);
+            transform.RotateAround(_target.position, right, -mouseY);
             
             // カメラが下向きになりすぎないように制限
-            Vector3 directionToTarget = target.position - transform.position;
+            Vector3 directionToTarget = _target.position - transform.position;
             float angle = Vector3.Angle(transform.forward, Vector3.up);
             if (angle < 10f || angle > 170f)
             {
-                transform.RotateAround(target.position, right, mouseY);
+                transform.RotateAround(_target.position, right, mouseY);
             }
         }
     }
@@ -108,34 +108,34 @@ public class CameraFollow : MonoBehaviour
     // ターゲットを動的に変更するメソッド
     public void SetTarget(Transform newTarget)
     {
-        target = newTarget;
+        _target = newTarget;
     }
     
     // オフセットを動的に変更するメソッド
     public void SetOffset(Vector3 newOffset)
     {
-        offset = newOffset;
+        _offset = newOffset;
     }
     
     // スムース速度を動的に変更するメソッド
     public void SetSmoothSpeed(float newSpeed)
     {
-        smoothSpeed = newSpeed;
+        _smoothSpeed = newSpeed;
     }
     
     // デバッグ用：Gizmosで追跡範囲を表示
     void OnDrawGizmosSelected()
     {
-        if (target != null)
+        if (_target != null)
         {
             Gizmos.color = Color.yellow;
-            Gizmos.DrawWireSphere(target.position, 0.5f);
+            Gizmos.DrawWireSphere(_target.position, 0.5f);
             
             Gizmos.color = Color.blue;
-            Gizmos.DrawLine(transform.position, target.position);
+            Gizmos.DrawLine(transform.position, _target.position);
             
             Gizmos.color = Color.green;
-            Gizmos.DrawWireSphere(desiredPosition, 0.3f);
+            Gizmos.DrawWireSphere(_desiredPosition, 0.3f);
         }
     }
 } 

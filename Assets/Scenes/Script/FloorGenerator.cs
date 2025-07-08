@@ -3,20 +3,20 @@ using UnityEngine;
 public class FloorGenerator : MonoBehaviour
 {
     [Header("床の設定")]
-    [SerializeField] private Vector3 floorSize = new Vector3(20f, 1f, 20f);
-    [SerializeField] private Vector3 floorPosition = new Vector3(0f, 0f, 0f);
-    [SerializeField] private Material floorMaterial;
+    [SerializeField] private Vector3 _floorSize = new Vector3(20f, 1f, 20f);
+    [SerializeField] private Vector3 _floorPosition = new Vector3(0f, 0f, 0f);
+    [SerializeField] private Material _floorMaterial;
     
     [Header("床の見た目")]
-    [SerializeField] private Color floorColor = Color.gray;
-    [SerializeField] private bool addGridTexture = true;
-    [SerializeField] private float gridSize = 1f;
+    [SerializeField] private Color _floorColor = Color.gray;
+    [SerializeField] private bool _addGridTexture = true;
+    [SerializeField] private float _gridSize = 1f;
     
     [Header("物理設定")]
-    [SerializeField] private bool addRigidbody = false;
-    [SerializeField] private bool isKinematic = true;
+    [SerializeField] private bool _addRigidbody = false;
+    [SerializeField] private bool _isKinematic = true;
     
-    private GameObject floorObject;
+    private GameObject _floorObject;
     
     void Start()
     {
@@ -26,12 +26,12 @@ public class FloorGenerator : MonoBehaviour
     void CreateFloor()
     {
         // 床オブジェクトの作成
-        floorObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        floorObject.name = "Floor";
+        _floorObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        _floorObject.name = "Floor";
         
         // 位置とサイズの設定
-        floorObject.transform.position = floorPosition;
-        floorObject.transform.localScale = floorSize;
+        _floorObject.transform.position = _floorPosition;
+        _floorObject.transform.localScale = _floorSize;
         
         // マテリアルの設定
         SetupMaterial();
@@ -40,18 +40,18 @@ public class FloorGenerator : MonoBehaviour
         SetupPhysics();
         
         // レイヤー設定（地面チェック用）
-        floorObject.layer = LayerMask.NameToLayer("Default");
+        _floorObject.layer = LayerMask.NameToLayer("Default");
         
-        Debug.Log("床を作成しました: " + floorObject.name);
+        Debug.Log("床を作成しました: " + _floorObject.name);
     }
     
     void SetupMaterial()
     {
-        Renderer renderer = floorObject.GetComponent<Renderer>();
+        Renderer renderer = _floorObject.GetComponent<Renderer>();
         
-        if (floorMaterial != null)
+        if (_floorMaterial != null)
         {
-            renderer.material = floorMaterial;
+            renderer.material = _floorMaterial;
         }
         else
         {
@@ -70,12 +70,12 @@ public class FloorGenerator : MonoBehaviour
             }
             
             Material material = new Material(standardShader);
-            material.color = floorColor;
+            material.color = _floorColor;
             
-            if (addGridTexture)
+            if (_addGridTexture)
             {
                 material.mainTexture = CreateGridTexture();
-                material.mainTextureScale = new Vector2(floorSize.x / gridSize, floorSize.z / gridSize);
+                material.mainTextureScale = new Vector2(_floorSize.x / _gridSize, _floorSize.z / _gridSize);
             }
             
             renderer.material = material;
@@ -88,7 +88,7 @@ public class FloorGenerator : MonoBehaviour
         Texture2D texture = new Texture2D(textureSize, textureSize);
         
         Color gridColor = Color.white;
-        Color backgroundColor = floorColor;
+        Color backgroundColor = _floorColor;
         
         for (int x = 0; x < textureSize; x++)
         {
@@ -107,21 +107,21 @@ public class FloorGenerator : MonoBehaviour
     void SetupPhysics()
     {
         // 既存のRigidbodyを削除
-        Rigidbody existingRigidbody = floorObject.GetComponent<Rigidbody>();
+        Rigidbody existingRigidbody = _floorObject.GetComponent<Rigidbody>();
         if (existingRigidbody != null)
         {
             DestroyImmediate(existingRigidbody);
         }
         
-        if (addRigidbody)
+        if (_addRigidbody)
         {
-            Rigidbody rigidbody = floorObject.AddComponent<Rigidbody>();
-            rigidbody.isKinematic = isKinematic;
-            rigidbody.useGravity = !isKinematic;
+            Rigidbody rigidbody = _floorObject.AddComponent<Rigidbody>();
+            rigidbody.isKinematic = _isKinematic;
+            rigidbody.useGravity = !_isKinematic;
         }
         
         // Colliderの設定（既にCubeプリミティブに含まれている）
-        Collider collider = floorObject.GetComponent<Collider>();
+        Collider collider = _floorObject.GetComponent<Collider>();
         if (collider != null)
         {
             collider.isTrigger = false;
@@ -132,9 +132,9 @@ public class FloorGenerator : MonoBehaviour
     [ContextMenu("床を再生成")]
     void RegenerateFloor()
     {
-        if (floorObject != null)
+        if (_floorObject != null)
         {
-            DestroyImmediate(floorObject);
+            DestroyImmediate(_floorObject);
         }
         CreateFloor();
     }
@@ -142,33 +142,33 @@ public class FloorGenerator : MonoBehaviour
     // 床の情報を取得
     public GameObject GetFloorObject()
     {
-        return floorObject;
+        return _floorObject;
     }
     
     // 床の位置を取得
     public Vector3 GetFloorPosition()
     {
-        return floorObject != null ? floorObject.transform.position : Vector3.zero;
+        return _floorObject != null ? _floorObject.transform.position : Vector3.zero;
     }
     
     // 床のサイズを取得
     public Vector3 GetFloorSize()
     {
-        return floorObject != null ? floorObject.transform.localScale : Vector3.zero;
+        return _floorObject != null ? _floorObject.transform.localScale : Vector3.zero;
     }
     
     // デバッグ用：Gizmosで床の範囲を表示
     void OnDrawGizmosSelected()
     {
-        if (floorObject != null)
+        if (_floorObject != null)
         {
             Gizmos.color = Color.green;
-            Gizmos.DrawWireCube(floorObject.transform.position, floorObject.transform.localScale);
+            Gizmos.DrawWireCube(_floorObject.transform.position, _floorObject.transform.localScale);
         }
         else
         {
             Gizmos.color = Color.yellow;
-            Gizmos.DrawWireCube(floorPosition, floorSize);
+            Gizmos.DrawWireCube(_floorPosition, _floorSize);
         }
     }
 } 
