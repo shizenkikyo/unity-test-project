@@ -1,133 +1,212 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class Cube : MonoBehaviour
 {
-    private enum STATE
+    [Header("回転設定")]
+    [SerializeField] private float rotatingSpeed = 0.8f;
+    [SerializeField] private float rotatingAngle = 90f;
+    [SerializeField] private AnimationCurve rotationCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+    [SerializeField] private bool useSmoothEasing = true;
+    [SerializeField] private float easingStrength = 0.3f;
+    
+    [Header("音効果設定")]
+    [SerializeField] private AudioSource audioSource;
+    [SerializeField] private AudioClip rollSound;
+    [SerializeField] private AudioClip landSound;
+    [SerializeField] private float rollVolume = 0.5f;
+    [SerializeField] private float landVolume = 0.7f;
+    [SerializeField] private bool enableSound = true;
+    
+    private Vector3 halfSize;
+    private float time = 0f;
+    private Vector3 axis = Vector3.zero;
+    private Vector3 point = Vector3.zero;
+    private bool isRotating = false;
+    
+    private void Awake()
     {
-        IDLE,
-        ROLLING
+        halfSize = transform.localScale / 2f;
+        
+        // AudioSourceが設定されていない場合は自動で追加
+        if (audioSource == null)
+        {
+            audioSource = GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+            }
+        }
+        
+        // AudioSourceの初期設定
+        if (audioSource != null)
+        {
+            audioSource.playOnAwake = false;
+            audioSource.loop = false;
+        }
     }
-    private STATE _state = STATE.IDLE;
-
-    private float _angle = 0.0f;
-    private Vector3 _axis;
-    private Vector3 _pivot;
-    private Vector3 _start;
-    private Vector3 _end;
-
-    private bool _isAutoMoving = false;
-    private Vector3 _currentMoveDirection;
-    private Vector3 _currentRotationAxis;
-
-    private Vector3? _nextMoveDirection = null;
-    private Vector3? _nextRotationAxis = null;
-
-    [SerializeField]
-    private float _rotateSpeed = 220f;
-
-    void Update()
+    
+    private void Update()
     {
-        UpdateControl();
-        UpdateRotation();
+        HandleInput();
     }
-
-    void UpdateControl()
+    
+    private void HandleInput()
     {
+        // 回転中は入力を無視
+        if (isRotating) return;
+        
         Keyboard keyboard = Keyboard.current;
-        if (keyboard == null)
+        if (keyboard == null) return;
+        
+        // 入力に基づいて回転軸と回転中心を設定
+        if (keyboard.upArrowKey.isPressed)
         {
-            return;
+            axis = Vector3.right;
+            point = transform.position + new Vector3(0f, -halfSize.y, halfSize.z);
         }
-
-        Vector3? newMoveDirection = null;
-        Vector3? newRotationAxis = null;
-
-        if (keyboard.leftArrowKey.wasPressedThisFrame)
+        else if (keyboard.downArrowKey.isPressed)
         {
-            newMoveDirection = Vector3.left;
-            newRotationAxis = Vector3.forward;
+            axis = Vector3.left;
+            point = transform.position + new Vector3(0f, -halfSize.y, -halfSize.z);
         }
-        else if (keyboard.rightArrowKey.wasPressedThisFrame)
+        else if (keyboard.leftArrowKey.isPressed)
         {
-            newMoveDirection = Vector3.right;
-            newRotationAxis = Vector3.back;
+            axis = Vector3.forward;
+            point = transform.position + new Vector3(-halfSize.x, -halfSize.y, 0f);
         }
-        else if (keyboard.upArrowKey.wasPressedThisFrame)
+        else if (keyboard.rightArrowKey.isPressed)
         {
-            newMoveDirection = Vector3.forward;
-            newRotationAxis = Vector3.right;
+            axis = Vector3.back;
+            point = transform.position + new Vector3(halfSize.x, -halfSize.y, 0f);
         }
-        else if (keyboard.downArrowKey.wasPressedThisFrame)
+        
+        // 回転開始
+        if (point != Vector3.zero)
         {
-            newMoveDirection = Vector3.back;
-            newRotationAxis = Vector3.left;
-        }
-
-        if (newMoveDirection.HasValue)
-        {
-            if (_isAutoMoving && newMoveDirection.Value == _currentMoveDirection)
-            {
-                _isAutoMoving = false;
-                _nextMoveDirection = null;
-                _nextRotationAxis = null;
-                return;
-            }
-
-            if (_state == STATE.ROLLING)
-            {
-                _nextMoveDirection = newMoveDirection.Value;
-                _nextRotationAxis = newRotationAxis.Value;
-            }
-            else
-            {
-                StartAutoRoll(newMoveDirection.Value, newRotationAxis.Value);
-            }
+            PlayRollSound();
+            StartCoroutine(StartRotate());
         }
     }
-
-    void StartAutoRoll(Vector3 moveDirection, Vector3 rotationAxis)
+    
+    private IEnumerator StartRotate()
     {
-        _isAutoMoving = true;
-        _currentMoveDirection = moveDirection;
-        _currentRotationAxis = rotationAxis;
-        StartRoll(moveDirection, rotationAxis);
-    }
-
-    void StartRoll(Vector3 moveDirection, Vector3 rotationAxis)
-    {
-        _state = STATE.ROLLING;
-        _angle = 0.0f;
-        _start = transform.position;
-        _end = _start + moveDirection;
-        _axis = rotationAxis;
-        _pivot = _start + (moveDirection / 2.0f) + (Vector3.down / 2.0f);
-    }
-
-    void UpdateRotation()
-    {
-        if (_state != STATE.ROLLING)
+        isRotating = true;
+        float elapsedTime = 0f;
+        float totalAngle = 0f;
+        
+        Debug.Log($"Starting rotation - Axis: {axis}, Point: {point}, Speed: {rotatingSpeed}");
+        
+        while (elapsedTime < rotatingSpeed)
         {
-            if (_nextMoveDirection.HasValue)
+            // アニメーションカーブを使用して滑らかな回転
+            float progress = elapsedTime / rotatingSpeed;
+            float curveValue = rotationCurve.Evaluate(progress);
+            
+            // イージングを適用
+            if (useSmoothEasing)
             {
-                StartAutoRoll(_nextMoveDirection.Value, _nextRotationAxis.Value);
-                _nextMoveDirection = null;
-                _nextRotationAxis = null;
+                curveValue = ApplyEasing(curveValue, easingStrength);
             }
-            else if (_isAutoMoving)
+            
+            // このフレームで回転する角度を計算
+            float targetAngle = rotatingAngle * curveValue;
+            float angleThisFrame = targetAngle - totalAngle;
+            
+            if (angleThisFrame > 0)
             {
-                StartRoll(_currentMoveDirection, _currentRotationAxis);
+                transform.RotateAround(point, axis, angleThisFrame);
+                totalAngle = targetAngle;
             }
-            return;
+            
+            elapsedTime += Time.deltaTime;
+            yield return null;
         }
-
-        _angle += _rotateSpeed * Time.deltaTime;
-        transform.RotateAround(_pivot, _axis, _rotateSpeed * Time.deltaTime);
-
-        if (_angle >= 90.0f)
+        
+        // 最終的な角度調整（精度を保つため）
+        float finalAngle = rotatingAngle - totalAngle;
+        if (finalAngle > 0)
         {
-            transform.position = _end;
-            _state = STATE.IDLE;
+            transform.RotateAround(point, axis, finalAngle);
         }
+        
+        // 回転完了時の処理
+        time = 0f;
+        axis = Vector3.zero;
+        point = Vector3.zero;
+        isRotating = false;
+        
+        // 着地音を再生
+        PlayLandSound();
+        
+        Debug.Log("Rotation completed");
+    }
+    
+    // イージング関数
+    private float ApplyEasing(float t, float strength)
+    {
+        // 滑らかなイージング（SmoothStepの改良版）
+        float eased = t * t * (3f - 2f * t);
+        return Mathf.Lerp(t, eased, strength);
+    }
+    
+    // 転がり音を再生
+    private void PlayRollSound()
+    {
+        if (!enableSound || audioSource == null || rollSound == null) return;
+        
+        audioSource.clip = rollSound;
+        audioSource.volume = rollVolume;
+        audioSource.Play();
+        
+        Debug.Log("Playing roll sound");
+    }
+    
+    // 着地音を再生
+    private void PlayLandSound()
+    {
+        if (!enableSound || audioSource == null || landSound == null) return;
+        
+        audioSource.clip = landSound;
+        audioSource.volume = landVolume;
+        audioSource.Play();
+        
+        Debug.Log("Playing land sound");
+    }
+    
+    // 音効果の設定をリセット
+    [ContextMenu("Reset Audio Settings")]
+    private void ResetAudioSettings()
+    {
+        if (audioSource != null)
+        {
+            audioSource.Stop();
+            audioSource.clip = null;
+        }
+        Debug.Log("Audio settings reset");
+    }
+    
+    // デバッグ用：Gizmosで回転軸と回転中心を表示
+    private void OnDrawGizmosSelected()
+    {
+        if (point != Vector3.zero)
+        {
+            // 回転中心を表示
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireSphere(point, 0.1f);
+            
+            // 回転軸を表示
+            Gizmos.color = Color.red;
+            Gizmos.DrawRay(point, axis * 2f);
+            
+            // Cubeの中心から回転中心への線を表示
+            Gizmos.color = Color.blue;
+            Gizmos.DrawLine(transform.position, point);
+        }
+        
+        // Cubeのサイズを表示
+        Gizmos.color = Color.green;
+        Gizmos.DrawWireCube(transform.position, transform.localScale);
     }
 }
