@@ -10,6 +10,10 @@ public class Player : MonoBehaviour
     [SerializeField] private float _jumpHoldMultiplier = 1.5f;
     [SerializeField] private float _jumpHoldTime = 0.3f;
     
+    [Header("移動設定")]
+    [SerializeField] private float _moveSpeed = 5f;
+    [SerializeField] private float _maxMoveDistance = 5f;
+    
     [Header("重力設定")]
     [SerializeField] private float _gravity = 20f;
     [SerializeField] private float _maxFallSpeed = 15f;
@@ -37,6 +41,9 @@ public class Player : MonoBehaviour
     private bool _isHoldingJump = false;
     private float _jumpHoldTimer = 0f;
     private Vector3 _startPosition;
+    private float _horizontalInput = 0f;
+    private bool _isGrounded = false; // 着地状態を追跡
+    private float _groundedTimer = 0f; // 着地タイマー
     
     // イベント
     public System.Action OnPlayerDied;
@@ -71,16 +78,22 @@ public class Player : MonoBehaviour
     {
         _rigidbody.useGravity = false; // カスタム重力を使用
         _rigidbody.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
-        _rigidbody.linearDamping = 0f;
-        _rigidbody.angularDamping = 0f;
+        _rigidbody.linearDamping = 0.1f; // 軽い減衰を追加して震えを防ぐ
+        _rigidbody.angularDamping = 0.1f;
+        _rigidbody.interpolation = RigidbodyInterpolation.Interpolate; // 補間を有効にして滑らかな動きを実現
     }
     
     private void Update()
     {
         HandleInput();
-        ApplyGravity();
         UpdateRotation();
         UpdateJumpHold();
+    }
+    
+    private void FixedUpdate()
+    {
+        ApplyGravity();
+        HandleHorizontalMovement();
     }
     
     private void HandleInput()
@@ -89,6 +102,7 @@ public class Player : MonoBehaviour
         Keyboard keyboard = Keyboard.current;
         if (keyboard != null)
         {
+            // ジャンプ入力
             if (keyboard.spaceKey.wasPressedThisFrame)
             {
                 StartJump();
@@ -101,6 +115,17 @@ public class Player : MonoBehaviour
             else
             {
                 _isHoldingJump = false;
+            }
+            
+            // 左右移動入力
+            _horizontalInput = 0f;
+            if (keyboard.leftArrowKey.isPressed)
+            {
+                _horizontalInput = -1f;
+            }
+            else if (keyboard.rightArrowKey.isPressed)
+            {
+                _horizontalInput = 1f;
             }
         }
         
@@ -122,10 +147,25 @@ public class Player : MonoBehaviour
         }
     }
     
+    private void HandleHorizontalMovement()
+    {
+        if (_rigidbody == null || _horizontalInput == 0f) return;
+        
+        // 現在の位置を取得
+        Vector3 currentPosition = transform.position;
+        Vector3 targetPosition = currentPosition + new Vector3(_horizontalInput * _moveSpeed * Time.fixedDeltaTime, 0, 0);
+        
+        // 移動範囲を制限
+        float clampedX = Mathf.Clamp(targetPosition.x, _startPosition.x - _maxMoveDistance, _startPosition.x + _maxMoveDistance);
+        targetPosition.x = clampedX;
+        
+        // 位置を更新
+        transform.position = targetPosition;
+    }
+    
     private void StartJump()
     {
-        if (_isJumping) return;
-        
+        // ジャンプ中でも連続ジャンプを許可（Flappy Birdスタイル）
         _isJumping = true;
         _isHoldingJump = true;
         _jumpHoldTimer = 0f;
@@ -168,23 +208,60 @@ public class Player : MonoBehaviour
         if (_rigidbody == null) return;
         
         Vector3 velocity = _rigidbody.linearVelocity;
-        velocity.y -= _gravity * Time.deltaTime;
+        velocity.y -= _gravity * Time.fixedDeltaTime;
         velocity.y = Mathf.Max(velocity.y, -_maxFallSpeed);
         _rigidbody.linearVelocity = velocity;
         
-        // 地面に着地したかチェック
-        if (velocity.y <= 0 && transform.position.y <= _startPosition.y + 0.1f)
+        // 地面に着地したかチェック（より安定した判定）
+        bool isNearGround = transform.position.y <= _startPosition.y + 0.05f && velocity.y <= 0.2f;
+        
+        if (isNearGround)
         {
-            if (_isJumping)
+            if (!_isGrounded)
             {
-                _isJumping = false;
-                PlayFallSound();
+                // 初回着地時
+                _isGrounded = true;
+                _groundedTimer = 0f;
                 
-                if (_fallParticles != null)
+                if (_isJumping)
                 {
-                    _fallParticles.Play();
+                    _isJumping = false;
+                    PlayFallSound();
+                    
+                    if (_fallParticles != null)
+                    {
+                        _fallParticles.Play();
+                    }
                 }
             }
+            
+            // 着地タイマーを更新
+            _groundedTimer += Time.fixedDeltaTime;
+            
+            // 一定時間着地したら位置を安定化
+            if (_groundedTimer > 0.1f)
+            {
+                // 地面に近い位置に調整（ワープを防ぐため緩やかに）
+                if (transform.position.y < _startPosition.y - 0.05f)
+                {
+                    Vector3 adjustedPosition = transform.position;
+                    adjustedPosition.y = _startPosition.y - 0.02f; // 非常に小さな調整
+                    transform.position = adjustedPosition;
+                }
+                
+                // 下向き速度を小さくする
+                if (velocity.y < 0)
+                {
+                    velocity.y = Mathf.Max(velocity.y, -0.2f);
+                    _rigidbody.linearVelocity = velocity;
+                }
+            }
+        }
+        else
+        {
+            // 地面から離れた場合
+            _isGrounded = false;
+            _groundedTimer = 0f;
         }
     }
     
@@ -196,15 +273,20 @@ public class Player : MonoBehaviour
         float velocityY = _rigidbody.linearVelocity.y;
         
         // 速度に基づいて回転角度を決定
-        if (velocityY > 0)
+        if (velocityY > 0.5f) // 小さな速度では回転しない
         {
             // 上昇中
             targetRotation = _maxRotationAngle;
         }
-        else if (velocityY < 0)
+        else if (velocityY < -0.5f) // 小さな速度では回転しない
         {
             // 下降中
             targetRotation = _minRotationAngle;
+        }
+        else
+        {
+            // 速度が小さい場合は中立位置
+            targetRotation = 0f;
         }
         
         // 現在の回転を取得
@@ -217,8 +299,9 @@ public class Player : MonoBehaviour
             currentZRotation -= 360f;
         }
         
-        // 滑らかな回転
-        float newZRotation = Mathf.Lerp(currentZRotation, targetRotation, _rotationSpeed * Time.deltaTime);
+        // より滑らかな回転（速度を調整）
+        float rotationSpeed = Mathf.Abs(velocityY) > 2f ? _rotationSpeed : _rotationSpeed * 0.5f;
+        float newZRotation = Mathf.Lerp(currentZRotation, targetRotation, rotationSpeed * Time.deltaTime);
         transform.eulerAngles = new Vector3(currentRotation.x, currentRotation.y, newZRotation);
     }
     
@@ -287,6 +370,9 @@ public class Player : MonoBehaviour
         _isJumping = false;
         _isHoldingJump = false;
         _jumpHoldTimer = 0f;
+        _horizontalInput = 0f;
+        _isGrounded = false; // 着地状態をリセット
+        _groundedTimer = 0f; // 着地タイマーをリセット
         
         enabled = true;
         
@@ -303,6 +389,17 @@ public class Player : MonoBehaviour
         // 重力の方向を可視化
         Gizmos.color = Color.red;
         Gizmos.DrawRay(transform.position, Vector3.down * 2f);
+        
+        // 移動範囲の可視化
+        if (Application.isPlaying)
+        {
+            Gizmos.color = Color.blue;
+            Vector3 leftBound = new Vector3(_startPosition.x - _maxMoveDistance, _startPosition.y, _startPosition.z);
+            Vector3 rightBound = new Vector3(_startPosition.x + _maxMoveDistance, _startPosition.y, _startPosition.z);
+            Gizmos.DrawLine(leftBound, rightBound);
+            Gizmos.DrawWireSphere(leftBound, 0.3f);
+            Gizmos.DrawWireSphere(rightBound, 0.3f);
+        }
     }
     
     // パブリックプロパティ
@@ -310,4 +407,5 @@ public class Player : MonoBehaviour
     public bool IsHoldingJump => _isHoldingJump;
     public float CurrentVelocityY => _rigidbody != null ? _rigidbody.linearVelocity.y : 0f;
     public Vector3 Position => transform.position;
+    public float HorizontalInput => _horizontalInput;
 } 
